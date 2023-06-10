@@ -1,4 +1,4 @@
-#!"D:\FSDS\ML Project\diamond_price_prediction\venv\python.exe"
+#!D:\FSDS\ML_Project\diamond_price_prediction\venv\python.exe
 # EASY-INSTALL-ENTRY-SCRIPT: 'fonttools==4.39.4','console_scripts','fonttools'
 import re
 import sys

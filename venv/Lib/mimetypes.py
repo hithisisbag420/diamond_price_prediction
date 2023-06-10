@@ -135,25 +135,23 @@ class MimeTypes:
                 type = 'text/plain'
             return type, None           # never compressed, so encoding is None
         base, ext = posixpath.splitext(url)
-        while ext in self.suffix_map:
-            base, ext = posixpath.splitext(base + self.suffix_map[ext])
+        while (ext_lower := ext.lower()) in self.suffix_map:
+            base, ext = posixpath.splitext(base + self.suffix_map[ext_lower])
+        # encodings_map is case sensitive
         if ext in self.encodings_map:
             encoding = self.encodings_map[ext]
             base, ext = posixpath.splitext(base)
         else:
             encoding = None
+        ext = ext.lower()
         types_map = self.types_map[True]
         if ext in types_map:
             return types_map[ext], encoding
-        elif ext.lower() in types_map:
-            return types_map[ext.lower()], encoding
         elif strict:
             return None, encoding
         types_map = self.types_map[False]
         if ext in types_map:
             return types_map[ext], encoding
-        elif ext.lower() in types_map:
-            return types_map[ext.lower()], encoding
         else:
             return None, encoding
 
@@ -169,7 +167,7 @@ class MimeTypes:
         but non-standard types.
         """
         type = type.lower()
-        extensions = self.types_map_inv[True].get(type, [])
+        extensions = list(self.types_map_inv[True].get(type, []))
         if not strict:
             for ext in self.types_map_inv[False].get(type, []):
                 if ext not in extensions:
@@ -372,7 +370,7 @@ def init(files=None):
 
 def read_mime_types(file):
     try:
-        f = open(file)
+        f = open(file, encoding='utf-8')
     except OSError:
         return None
     with f:
@@ -401,6 +399,7 @@ def _default_mime_types():
         '.Z': 'compress',
         '.bz2': 'bzip2',
         '.xz': 'xz',
+        '.br': 'br',
         }
 
     # Before adding new types, make sure they are either registered with IANA,
@@ -563,7 +562,7 @@ def _default_mime_types():
 _default_mime_types()
 
 
-if __name__ == '__main__':
+def _main():
     import getopt
 
     USAGE = """\
@@ -607,3 +606,7 @@ More than one type argument may be given.
             guess, encoding = guess_type(gtype, strict)
             if not guess: print("I don't know anything about type", gtype)
             else: print('type:', guess, 'encoding:', encoding)
+
+
+if __name__ == '__main__':
+    _main()

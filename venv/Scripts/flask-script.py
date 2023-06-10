@@ -1,4 +1,4 @@
-#!"D:\FSDS\ML Project\diamond_price_prediction\venv\python.exe"
+#!D:\FSDS\ML_Project\diamond_price_prediction\venv\python.exe
 # EASY-INSTALL-ENTRY-SCRIPT: 'Flask==2.3.2','console_scripts','flask'
 import re
 import sys

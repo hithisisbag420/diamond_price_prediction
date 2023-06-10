@@ -158,7 +158,7 @@ class _ProactorBasePipeTransport(transports._FlowControlMixin,
             # end then it may fail with ERROR_NETNAME_DELETED if we
             # just close our end.  First calling shutdown() seems to
             # cure it, but maybe using DisconnectEx() would be better.
-            if hasattr(self._sock, 'shutdown'):
+            if hasattr(self._sock, 'shutdown') and self._sock.fileno() != -1:
                 self._sock.shutdown(socket.SHUT_RDWR)
             self._sock.close()
             self._sock = None
@@ -450,7 +450,8 @@ class _ProactorWritePipeTransport(_ProactorBaseWritePipeTransport):
             self.close()
 
 
-class _ProactorDatagramTransport(_ProactorBasePipeTransport):
+class _ProactorDatagramTransport(_ProactorBasePipeTransport,
+                                 transports.DatagramTransport):
     max_size = 256 * 1024
     def __init__(self, loop, sock, protocol, address=None,
                  waiter=None, extra=None):
@@ -627,10 +628,9 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         self._accept_futures = {}   # socket file descriptor => Future
         proactor.set_loop(self)
         self._make_self_pipe()
-        self_no = self._csock.fileno()
         if threading.current_thread() is threading.main_thread():
             # wakeup fd can only be installed to a file descriptor from the main thread
-            signal.set_wakeup_fd(self_no)
+            signal.set_wakeup_fd(self._csock.fileno())
 
     def _make_socket_transport(self, sock, protocol, waiter=None,
                                extra=None, server=None):
@@ -676,7 +676,8 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         if self.is_closed():
             return
 
-        signal.set_wakeup_fd(-1)
+        if threading.current_thread() is threading.main_thread():
+            signal.set_wakeup_fd(-1)
         # Call these methods before closing the event loop (before calling
         # BaseEventLoop.close), because they can schedule callbacks with
         # call_soon(), which is forbidden when the event loop is closed.
@@ -711,7 +712,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
             raise exceptions.SendfileNotAvailableError("not a regular file")
         try:
             fsize = os.fstat(fileno).st_size
-        except OSError as err:
+        except OSError:
             raise exceptions.SendfileNotAvailableError("not a regular file")
         blocksize = count if count else fsize
         if not blocksize:
@@ -766,6 +767,14 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
         try:
             if f is not None:
                 f.result()  # may raise
+            if self._self_reading_future is not f:
+                # When we scheduled this Future, we assigned it to
+                # _self_reading_future. If it's not there now, something has
+                # tried to cancel the loop while this callback was still in the
+                # queue (see windows_events.ProactorEventLoop.run_forever). In
+                # that case stop here instead of continuing to schedule a new
+                # iteration.
+                return
             f = self._proactor.recv(self._ssock, 4096)
         except exceptions.CancelledError:
             # _close_self_pipe() has been called, stop waiting for data
@@ -783,8 +792,17 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
             f.add_done_callback(self._loop_self_reading)
 
     def _write_to_self(self):
+        # This may be called from a different thread, possibly after
+        # _close_self_pipe() has been called or even while it is
+        # running.  Guard for self._csock being None or closed.  When
+        # a socket is closed, send() raises OSError (with errno set to
+        # EBADF, but let's not rely on the exact error code).
+        csock = self._csock
+        if csock is None:
+            return
+
         try:
-            self._csock.send(b'\0')
+            csock.send(b'\0')
         except OSError:
             if self._debug:
                 logger.debug("Fail to write a null byte into the "

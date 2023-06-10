@@ -463,6 +463,7 @@ def _read_directory(archive):
             path = _bootstrap_external._path_join(archive, name)
             t = (path, compress, data_size, file_size, file_offset, time, date, crc)
             files[name] = t
+            _bootstrap._verbose_message('zipimport: name : {}', name)
             count += 1
     _bootstrap._verbose_message('zipimport: found {} names in {!r}', count, archive)
     return files
@@ -608,7 +609,7 @@ def _unmarshal_code(self, pathname, fullpath, fullname, data):
                 )
 
                 try:
-                    _boostrap_external._validate_hash_pyc(
+                    _bootstrap_external._validate_hash_pyc(
                         data, source_hash, fullname, exc_details)
                 except ImportError:
                     return None
